@@ -1,5 +1,7 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using NATS.Client.Core;
 
 namespace NATS.Client.JetStream.Internal;
@@ -23,7 +25,7 @@ internal sealed class NatsJSJsonDocumentSerializer<T> : INatsDeserialize<NatsJSA
             return error;
         }
 
-        var jsonTypeInfo = NatsJSJsonSerializerContext.DefaultContext.GetTypeInfo(typeof(T));
+        var jsonTypeInfo = NatsJsSerializerDefaultContextTypeInfo<T>.GetTypeInfo();
         if (jsonTypeInfo == null)
         {
             return new NatsJSException($"Unknown response type {typeof(T)}");
@@ -37,5 +39,42 @@ internal sealed class NatsJSJsonDocumentSerializer<T> : INatsDeserialize<NatsJSA
         }
 
         return result;
+    }
+}
+
+internal static class NatsJsSerializerDefaultContextTypeInfo<T>
+{
+    private static readonly object? _jsonTypeInfoMaybe = GenTypeInfo();
+
+    public static JsonTypeInfo? GetTypeInfo()
+    {
+        if (_jsonTypeInfoMaybe is JsonTypeInfo info)
+        {
+            return info;
+        }
+        else if (_jsonTypeInfoMaybe != null)
+        {
+            return null;
+        }
+        else
+        {
+            ThrowIfJsonTypeInfoInvalid();
+            return null;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowIfJsonTypeInfoInvalid() => throw ((_jsonTypeInfoMaybe as Exception) ?? new Exception("Should never get this"));
+
+    private static object? GenTypeInfo()
+    {
+        try
+        {
+            return NatsJSJsonSerializerContext.DefaultContext.GetTypeInfo(typeof(T));
+        }
+        catch (Exception e)
+        {
+            return e;
+        }
     }
 }
